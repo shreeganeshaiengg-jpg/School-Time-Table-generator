@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple School Time Table Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        
+        <header>
+            <h1>School Time Table Generator</h1>
+            <p>A simple python-based CSP scheduling website</p>
+        </header>
+
+        <!-- Status Alerts -->
+        <div id="alertContainer"></div>
+
+        <div class="row">
+            
+            <!-- Left Side: Inputs -->
+            <div class="col">
+                
+                <!-- 1. School Settings -->
+                <div class="form-section">
+                    <h3>1. Schedule Settings</h3>
+                    <div class="form-group">
+                        <label>Working Days</label>
+                        <div id="daysSelector">
+                            <label><input type="checkbox" value="Monday" checked> Monday</label><br>
+                            <label><input type="checkbox" value="Tuesday" checked> Tuesday</label><br>
+                            <label><input type="checkbox" value="Wednesday" checked> Wednesday</label><br>
+                            <label><input type="checkbox" value="Thursday" checked> Thursday</label><br>
+                            <label><input type="checkbox" value="Friday" checked> Friday</label><br>
+                            <label><input type="checkbox" value="Saturday"> Saturday</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="periodsPerDay">Periods per Day</label>
+                        <input type="number" id="periodsPerDay" value="7" min="1" max="10">
+                    </div>
+                </div>
+
+                <!-- 2. Classes & Sections -->
+                <div class="form-section">
+                    <h3>2. Classes & Sections</h3>
+                    <div class="form-group">
+                        <label for="sectionInput">Add Class/Section Name</label>
+                        <input type="text" id="sectionInput" placeholder="e.g. Grade 10-A">
+                        <button id="btnAddSection" style="margin-top: 8px;">Add Class</button>
+                    </div>
+                    <label>Added Classes:</label>
+                    <div id="sectionsList" class="list-box">
+                        <div style="color: #999; padding: 5px;">No classes added yet.</div>
+                    </div>
+                </div>
+
+                <!-- 3. Teachers Manager -->
+                <div class="form-section">
+                    <h3>3. Teachers</h3>
+                    <div class="form-group">
+                        <label for="teacherInput">Add Teacher Name</label>
+                        <input type="text" id="teacherInput" placeholder="e.g. Mr. Smith">
+                        <button id="btnAddTeacher" style="margin-top: 8px;">Add Teacher</button>
+                    </div>
+                    <label>Added Teachers:</label>
+                    <div id="teachersList" class="list-box">
+                        <div style="color: #999; padding: 5px;">No teachers added yet.</div>
+                    </div>
+                </div>
+
+                <!-- 4. Subjects Manager (Master list) -->
+                <div class="form-section">
+                    <h3>4. Subjects Master List</h3>
+                    <div class="form-group">
+                        <label for="masterSubjectInput">Subject Name</label>
+                        <input type="text" id="masterSubjectInput" placeholder="e.g. Mathematics">
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="masterSubjectIsLab"> Is Practical / Lab?
+                        </label>
+                    </div>
+                    <div class="form-group" id="masterLabContinuousContainer" style="display: none; background-color: #eee; padding: 10px; border-radius: 4px;">
+                        <label for="masterSubjectContinuous">Continuous Lab Hours</label>
+                        <input type="number" id="masterSubjectContinuous" value="2" min="1" max="5">
+                    </div>
+                    <button id="btnAddMasterSubject" style="margin-top: 8px; width: 100%;">Add Subject to Master</button>
+                    
+                    <label style="margin-top: 12px;">Added Subjects:</label>
+                    <div id="masterSubjectsList" class="list-box">
+                        <div style="color: #999; padding: 5px;">No subjects defined yet.</div>
+                    </div>
+                </div>
+
+                <!-- 5. Class Subject Assignments -->
+                <div class="form-section">
+                    <h3>5. Class Subject Assignments</h3>
+                    
+                    <div class="form-group">
+                        <label for="subjectSection">Class / Section</label>
+                        <select id="subjectSection">
+                            <option value="">-- Select Class --</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="subjectName">Subject Name</label>
+                        <select id="subjectName">
+                            <option value="">-- Select Subject --</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="subjectTeacher">Teacher Name</label>
+                        <select id="subjectTeacher">
+                            <option value="">-- Select Teacher --</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="subjectHours">Weekly Hours (Periods)</label>
+                        <input type="number" id="subjectHours" value="5" min="1" max="40">
+                    </div>
+
+                    <button id="btnAddSubject" style="width: 100%; margin-top: 10px;">Add Subject Assignment</button>
+                </div>
+
+                <!-- Added Subjects List -->
+                <div class="form-section">
+                    <h3>Added Assignments</h3>
+                    <div id="subjectsList" class="list-box">
+                        <div style="color: #999; padding: 5px;">No subjects added yet.</div>
+                    </div>
+                </div>
+
+                <!-- Action Panel -->
+                <div class="form-section" style="background-color: #eaeaea; text-align: center;">
+                    <button id="btnGenerate" style="font-size: 16px; font-weight: bold; width: 100%; background-color: #27ae60;">
+                        Generate Timetable
+                    </button>
+                    <button id="btnQuickFill" style="margin-top: 10px; width: 100%; background-color: #9b59b6;">
+                        Load Demo School Data
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- Right Side: Results -->
+            <div class="col" style="flex: 2;">
+                
+                <div class="form-section" style="min-height: 400px;">
+                    <h3>Generated Timetables</h3>
+                    
+                    <!-- Displayed when no timetable is generated yet -->
+                    <div id="welcomeScreen" style="padding: 40px text-align: center; color: #7f8c8d;">
+                        <p>Fill in the settings on the left or click "Load Demo School Data" and click "Generate Timetable" to produce the schedule.</p>
+                    </div>
+
+                    <!-- Timetable output section -->
+                    <div id="outputPanel" style="display: none;">
+                        
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <div>
+                                <label style="display: inline-block; margin-right: 10px;">View By:</label>
+                                <select id="viewToggle" style="width: 150px;">
+                                    <option value="class">Class / Section</option>
+                                    <option value="teacher">Teacher</option>
+                                </select>
+                            </div>
+                            <button id="btnPrint" style="background-color: #7f8c8d;">Print Timetable</button>
+                        </div>
+
+                        <!-- Active tabs for different classes/teachers -->
+                        <div id="tabsContainer" class="tab-bar"></div>
+
+                        <!-- Main Table Grid -->
+                        <div style="overflow-x: auto;">
+                            <table class="timetable" id="timetableGrid">
+                                <thead>
+                                    <!-- Populated dynamically -->
+                                </thead>
+                                <tbody>
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
