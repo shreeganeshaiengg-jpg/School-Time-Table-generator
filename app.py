@@ -1,4 +1,5 @@
 import math
+import random
 from flask import Flask, request, jsonify, render_template
 from ortools.sat.python import cp_model
 
@@ -7,6 +8,177 @@ app = Flask(__name__)
 @app.route('/')
 def index():
     return render_template('index.html')
+
+def generate_timetable_heuristic(working_days, periods_per_day, sections, subjects, num_trials=2000):
+    num_days = len(working_days)
+    num_periods = periods_per_day
+    
+    # Identify unique teachers
+    teachers = list(set(s.get("teacher") for s in subjects if s.get("teacher")))
+    
+    # Separate into lab blocks and theory tasks
+    lab_blocks = []
+    theory_tasks = []
+    
+    for idx, s in enumerate(subjects):
+        name = s.get("name")
+        section = s.get("section")
+        teacher = s.get("teacher")
+        weekly = s.get("weekly_hours", 0)
+        is_lab = s.get("is_lab", False)
+        cont = s.get("continuous_hours", 1)
+        
+        if is_lab and cont > 1:
+            num_blocks = weekly // cont
+            for _ in range(num_blocks):
+                lab_blocks.append({
+                    "subject_idx": idx,
+                    "name": name,
+                    "section": section,
+                    "teacher": teacher,
+                    "is_lab": True,
+                    "duration": cont,
+                    "weekly_hours": weekly
+                })
+        else:
+            for _ in range(weekly):
+                theory_tasks.append({
+                    "subject_idx": idx,
+                    "name": name,
+                    "section": section,
+                    "teacher": teacher,
+                    "is_lab": is_lab,
+                    "duration": 1,
+                    "weekly_hours": weekly
+                })
+
+    for trial in range(num_trials):
+        # Initialize grids
+        timetables = {sec: {day: [None] * num_periods for day in working_days} for sec in sections}
+        teacher_timetables = {t: {day: [None] * num_periods for day in working_days} for t in teachers}
+        
+        # section -> day -> subject_name_lower -> count
+        daily_subject_counts = {sec: {day: {} for day in working_days} for sec in sections}
+        
+        # Place lab blocks
+        success = True
+        random.shuffle(lab_blocks)
+        
+        for block in lab_blocks:
+            sec = block["section"]
+            t = block["teacher"]
+            name_lower = block["name"].strip().lower()
+            duration = block["duration"]
+            
+            valid_positions = []
+            for d_idx, day in enumerate(working_days):
+                if daily_subject_counts[sec][day].get(name_lower, 0) > 0:
+                    continue
+                    
+                for p in range(num_periods - duration + 1):
+                    sec_free = all(timetables[sec][day][p + k] is None for k in range(duration))
+                    t_free = True
+                    if t:
+                        t_free = all(teacher_timetables[t][day][p + k] is None for k in range(duration))
+                        
+                    if sec_free and t_free:
+                        valid_positions.append((day, p))
+            
+            if not valid_positions:
+                success = False
+                break
+                
+            day, start_p = random.choice(valid_positions)
+            
+            sub_info = {
+                "subject": block["name"],
+                "teacher": t,
+                "is_lab": True,
+                "continuous_hours": duration
+            }
+            for k in range(duration):
+                timetables[sec][day][start_p + k] = sub_info
+                if t:
+                    teacher_timetables[t][day][start_p + k] = {
+                        "subject": block["name"],
+                        "section": sec,
+                        "is_lab": True,
+                        "continuous_hours": duration
+                    }
+            
+            daily_subject_counts[sec][day][name_lower] = daily_subject_counts[sec][day].get(name_lower, 0) + duration
+
+        if not success:
+            continue
+            
+        # Place theory tasks
+        random.shuffle(theory_tasks)
+        
+        for task in theory_tasks:
+            sec = task["section"]
+            t = task["teacher"]
+            name_lower = task["name"].strip().lower()
+            weekly = task["weekly_hours"]
+            
+            if weekly <= 5:
+                max_daily = 1
+            else:
+                max_daily = max(2, (weekly + num_days - 1) // num_days)
+                
+            valid_positions = []
+            for day in working_days:
+                current_count = daily_subject_counts[sec][day].get(name_lower, 0)
+                if current_count >= max_daily:
+                    continue
+                    
+                for p in range(num_periods):
+                    if timetables[sec][day][p] is not None:
+                        continue
+                    if t and teacher_timetables[t][day][p] is not None:
+                        continue
+                        
+                    consecutive_violation = False
+                    if p > 0:
+                        prev_slot = timetables[sec][day][p - 1]
+                        if prev_slot and prev_slot["subject"].strip().lower() == name_lower:
+                            consecutive_violation = True
+                    if p < num_periods - 1:
+                        next_slot = timetables[sec][day][p + 1]
+                        if next_slot and next_slot["subject"].strip().lower() == name_lower:
+                            consecutive_violation = True
+                            
+                    if consecutive_violation:
+                        continue
+                        
+                    valid_positions.append((day, p))
+            
+            if not valid_positions:
+                success = False
+                break
+                
+            day, p = random.choice(valid_positions)
+            
+            sub_info = {
+                "subject": task["name"],
+                "teacher": t,
+                "is_lab": task["is_lab"],
+                "continuous_hours": 1
+            }
+            timetables[sec][day][p] = sub_info
+            if t:
+                teacher_timetables[t][day][p] = {
+                    "subject": task["name"],
+                    "section": sec,
+                    "is_lab": task["is_lab"],
+                    "continuous_hours": 1
+                }
+            
+            daily_subject_counts[sec][day][name_lower] = daily_subject_counts[sec][day].get(name_lower, 0) + 1
+            
+        if success:
+            return timetables, teacher_timetables
+            
+    return None, None
 
 @app.route('/api/generate', methods=['POST'])
 def generate_timetable():
@@ -122,10 +294,14 @@ def generate_timetable():
                 if cont > 1:
                     model.Add(sum(Y[i, d, p] for p in range(num_periods - cont + 1)) <= 1)
                 else:
-                    model.Add(sum(X[i, d, p] for p in range(num_periods)) <= 2)
+                    max_daily = 1 if weekly <= 5 else 2
+                    model.Add(sum(X[i, d, p] for p in range(num_periods)) <= max_daily)
         else:
             # For theory subjects, limit daily hours
-            max_daily = max(2, (weekly + num_days - 1) // num_days)
+            if weekly <= 5:
+                max_daily = 1
+            else:
+                max_daily = max(2, (weekly + num_days - 1) // num_days)
             for d in range(num_days):
                 model.Add(sum(X[i, d, p] for p in range(num_periods)) <= max_daily)
 
@@ -241,10 +417,24 @@ def generate_timetable():
             "periods_per_day": num_periods
         })
     else:
-        return jsonify({
-            "success": False,
-            "error": "Could not find a feasible timetable satisfying all constraints. Please verify teacher workloads or reduce the total weekly hours."
-        })
+        # Fallback: Try Randomized Heuristic Constraint Satisfaction Algorithm
+        timetables, teacher_timetables = generate_timetable_heuristic(
+            working_days, periods_per_day, sections, subjects
+        )
+        if timetables is not None:
+            return jsonify({
+                "success": True,
+                "timetables": timetables,
+                "teacher_timetables": teacher_timetables,
+                "working_days": working_days,
+                "periods_per_day": num_periods,
+                "info": "Generated using Randomized Heuristic Constraint Satisfaction Algorithm (Fallback)"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Could not find a feasible timetable satisfying all constraints. Please verify teacher workloads or reduce the total weekly hours."
+            })
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
