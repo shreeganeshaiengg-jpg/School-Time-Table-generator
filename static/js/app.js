@@ -82,14 +82,16 @@ document.addEventListener('DOMContentLoaded', () => {
 // === HELPER FUNCTIONS ===
 
 // Display alert messages on the page
-function showAlert(message, type = 'danger') {
+function showAlert(message, type = 'danger', preventScroll = false) {
     elements.alertContainer.innerHTML = `
         <div class="alert-message alert-${type}">
             ${message}
         </div>
     `;
-    // Scroll to top where alert is placed
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!preventScroll) {
+        // Scroll to top where alert is placed
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
 }
 
 function clearAlerts() {
@@ -352,7 +354,7 @@ function addSubject() {
     clearAlerts();
 
     renderSubjectsList();
-    showAlert(`Added ${name} for ${section} successfully!`, "success");
+    showAlert(`Added ${name} for ${section} successfully!`, "success", true);
 }
 
 // Render added subjects list (Class assignments)
